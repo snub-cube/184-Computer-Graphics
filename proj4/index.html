@@ -1,0 +1,327 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Mesh Editor</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2023</h1>
+<h1 align="middle">Project 4: Cloth Simulator</h1>
+<h2 align="middle">Morgan Lyu, CS184</h2>
+<h2 align="middle">Website: https://cal-cs184-student.github.io/project-webpages-sp23-snub-cube/proj4/index.html</h2>
+
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p>In this project I first modeled a static cloth through a point mass grid connected by spring meshes. 
+  To make this piece of cloth move, physics behind spring movement under effects of gravity are implemented to simulate the cloth's weight.
+  I then implement collision capabilities with other geometries like sphere, plane and the fabric itself. They involve making corrections to affected point masses' positions.
+  I also implemented various shaders that can create different textures and colors on model and make objects look more interesting.</p>
+
+<h2 align="middle">Part 1: Masses and springs</h2>
+<p>This part creates a mesh of point masses and springs that we're using to model cloth.</p>
+<p>1. I set the position of point masses according to given width x height dimension and set the pinned param to false by default. <br>
+  2. I put these point masses into a vector in a row-major order.<br>
+  3. If the point mass's index is within the cloth's pinned vector, I set the pinned boolean to true.<br>
+  4. I create springs across point masses (structural across neighboring points forming a grid, shearing across diagonals on grid, bending across every other point on grid).
+</p>
+<p>
+  <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/1-1.png" align="middle" width="400px"/>
+            <figcaption>without shearing constraint</figcaption>
+          </td>
+
+          <td>
+            <img src="images/1-2.png" align="middle" width="400px"/>
+            <figcaption>with only shearing constraint</figcaption>
+          </td>
+
+          <td>
+            <img src="images/1-3.png" align="middle" width="400px"/>
+            <figcaption>all constraints</figcaption>
+          </td>
+      </table>
+    </div>
+</p>
+
+<h2 align="middle">Part 2: Simulation via numerical integration</h2>
+<p>This part uses integration to model cloth behavior.</p>
+<p>First, I calculated the sum of external forces experienced by point masses like gravity and spring's forces. 
+  For every pair of point massses connected by a spring I calculated the force experienced by them. And for every spring I assigned them a ks (elasticity).
+  However, for bending springs the ks is decreased to 0.2*ks. I calculated the forces' magnitude and direction acting on masses on ends using Hooke's law, and summed them together.
+  Finally, I used Verlet integration to compute new point mass positions. If a mass isn't pinned, I used the displacement formula to update its new position.
+  I also constrained the position update so that the cloth does not deform too much. This is done by setting a limit of at most 10 percent on each spring's length increase (compared to its rest length) at the end of every time step.
+</p>
+<p>
+  <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/ks500.png" align="middle" width="400px"/>
+            <figcaption>ks = 500</figcaption>
+          </td>
+          <td>
+            <img src="images/ks5k.png" align="middle" width="400px"/>
+            <figcaption>ks = 5000</figcaption>
+          </td>
+          <td>
+            <img src="images/ks50k.png" align="middle" width="400px"/>
+            <figcaption>ks = 50000</figcaption>
+          </td>
+        <p>Ks: As ks increases, there are less folds in the cloth, it is less flexible, droops a smaller distance, and takes a shorter time to fall to its final resting state. </p>
+      </table>
+      </div>
+    </p>
+<p>Density: As density increases, the cloth gets lighter and droops more.</p>
+<div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/d1.png" align="middle" width="400px"/>
+            <figcaption>density = 1</figcaption>
+          </td>
+          <td>
+            <img src="images/d100.png" align="middle" width="400px"/>
+            <figcaption>density = 100</figcaption>
+          </td>
+        </tr>
+      </table>
+<div>
+    <p>Damping: As damping increases, the cloth takes significantly less time to arrive at its final resting state rather than bouncing for a long time before doing so. A large
+      damping also causes a slower fall / movement.
+    </p>
+  <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/lowd.png" align="middle" width="400px"/>
+            <figcaption>low damping</figcaption>
+          </td>
+          <td>
+            <img src="images/highd.png" align="middle" width="400px"/>
+            <figcaption>high damping</figcaption>
+          </td>
+      </table>
+    </div>
+</p>
+
+<img src="images/2rest.png" align="middle" width="400px"/>
+<figcaption>pinned4 final resting state</figcaption>
+
+<h2 align="middle">Part 3: Handling collisions with other objects</h2>
+<p>Upon collision with other objects like spheres and planes, positions of point masses on the cloth need to be adjusted accordingly.
+  To do this, when their position enter the sphere interior (distance to sphere center is lesser than radius), we correct it to outside the sphere.
+  I determined the corrected position by a multiplying a (1-friction) parameter with a correction vector that points from last position to a tangent point on the sphere. Position = last position + (1.0 - friction) * correction.
+  The exact position is determined by friction.
+</p>
+<p>For handling plan collisions, I also apply a correction when masses on cloth cross the plane. The correction points towards the last position towards 
+  somewhere close to the plane's tangent point's norm. Offset = tangent_pt + SURFACE_OFFSET * normal. Position = last position + (1.0 - friction) * correction.
+</p>
+<p>
+  <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/3-2.png" align="middle" width="400px"/>
+            <figcaption>ks=500</figcaption>
+          </td>
+
+          <td>
+            <img src="images/3-1.png" align="middle" width="400px"/>
+            <figcaption>ks=5000</figcaption>
+          </td>
+
+          <td>
+            <img src="images/3-3.png" align="middle" width="400px"/>
+            <figcaption>ks=50000</figcaption>
+          </td>
+          <p>Similar as before in part 2, as ks increases, less folds occur in the cloth, it appears stiffer / not as flexible and droops a smaller distance around the sphere</p>
+      </table>
+    </div>
+</p>
+<img src="images/3-4.png" align="middle" width="400px"/>
+            <figcaption>resting</figcaption>
+
+<h2 align="middle">Part 4: Handling self-collisions</h2>
+<p>
+  To build a spatial map for the cloth, I implemented a hash_position method that create hash keys and looped over all point masses to populate the map. For masses's new positions I generated hash keys. If 
+  a hash key doesn't exist in a spatial map, the a key-value pair is created and stored. I then put mass addresses into vectors corresponding to hash keys.
+  To implement self_collide, I calculated the distance between each mass with candidate. If the distance is less than 2*thickness, then 2*thickness is added to correction_sum, an average correction is found, and the corrected postion = current position + correction/simulation steps.
+</p>
+<p>
+  <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/4-1.png" align="middle" width="400px"/>
+            <figcaption>initial self collision</figcaption>
+          </td>
+
+          <td>
+            <img src="images/4-2.png" align="middle" width="400px"/>
+            <figcaption>more self collision</figcaption>
+          </td>
+
+          <td>
+            <img src="images/4-3.png" align="middle" width="400px"/>
+            <figcaption>more restful state</figcaption>
+          </td>
+      </table>
+    </div>
+</p>
+<p>
+  <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <p>As density increases, more fluctuations occur per unit area in fabric as it self-collides. The deformation due to impact is dramatic 
+            at the site of impact and less so in areas above. Fabric at the ground level is squashed to an indiscernible degree while fabric above is still unaffected.
+             For low density fabric, the impact deformation at ground level is propagated to fabric above in legible wave-like form, and the deformation is "neater" and appears stiffer.
+          </p>
+          <td>
+            <img src="images/4d1.png" align="middle" width="400px"/>
+            <figcaption>density = 1</figcaption>
+          </td>
+
+          <td>
+            <img src="images/4d50.png" align="middle" width="400px"/>
+            <figcaption>density = 50</figcaption>
+          </td>
+        <tr align="center">
+          <p>The effects of ks increasing is mostly the same as the effects of density decreasing: more localized deformation upon self-collision, fabric having less integrity / more flexibility etc.
+            As the fabric completely reach the ground, a large ks means it will continue to bounce / twitch on the ground for a long time before settling down to a stable state.
+          </p>
+          <td>
+            <img src="images/4ks50.png" align="middle" width="400px"/>
+            <figcaption>ks = 50</figcaption>
+          </td>
+          <td>
+            <img src="images/4ks50k.png" align="middle" width="400px"/>
+            <figcaption>ks = 50000</figcaption>
+          </td>
+      </table>
+    </div>
+</p>
+
+<h2 align="middle">Part 5: Shaders</h2>
+<p>Vertex shaders apply actual transforms to vertices and change the geometry / position. 
+  Fragment shaders are applied after rasterization. It takes into account of attributes of geometry and outputs a color.
+  In this part I implemented shaders using GLSL. It takes into model-space inputs such as model geometry, texture images, and outputs a world-space vector that contains information about geometry, vertex placements, and colors.</p>
+<p>Blinn-Phong shader takes three lighting components and sum them together to create a shading. 
+  Ambient lighting is an uniform global light, diffuse lighting is a directional light, specular lighting is for highlights over small areas.
+  The equation used is shown below:
+</p>
+<img src="images/B-P.png" align="middle" width="800px"/>
+<figcaption>Blinn-Phong equation</figcaption>
+ <div align="middle">
+  <table style="width:100%">
+    <tr align="center">
+      <td>
+        <img src="images/ph1.png" align="middle" width="400px"/>
+        <figcaption>Ambient only</figcaption>
+      </td>
+
+      <td>
+        <img src="images/ph2.png" align="middle" width="400px"/>
+        <figcaption>Diffuse only</figcaption>
+      </td>
+
+      <td>
+        <img src="images/ph3.png" align="middle" width="400px"/>
+        <figcaption>Specular only</figcaption>
+      </td>
+  </table>
+  <img src="images/ph.png" align="middle" width="400px"/>
+        <figcaption>All components</figcaption>
+</div>
+<p>A custom texture is achieved by using the texture function in GLSL.</p>
+ <img src="images/5-1.png" align="middle" width="400px"/>
+ <figcaption>Custom texuture mapping</figcaption>
+
+ <p>
+  <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/5-3.png" align="middle" width="400px"/>
+          </td>
+          <td>
+            <img src="images/5-bump.png" align="middle" width="400px"/>
+            <figcaption>bump mapping</figcaption>
+          </td>
+          <td>
+            <img src="images/5-4.png" align="middle" width="400px"/>
+          </td>
+        </tr>
+      </table>
+    </div>
+</p>
+<img src="images/5-disp.png" align="middle" width="400px"/>
+<figcaption>displacement mapping</figcaption>
+<p>
+  <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/bump16.png" align="middle" width="400px"/>
+            <figcaption>mesh coarseness = 16, bump</figcaption>
+          </td>
+          <td>
+            <img src="images/bump128.png" align="middle" width="400px"/>
+            <figcaption>mesh coarseness = 128, bump</figcaption>
+          </td>
+        </tr>
+        <tr align="center">
+          <td>
+            <img src="images/disp16.png" align="middle" width="400px"/>
+            <figcaption>mesh coarseness = 16, displacement</figcaption>
+          </td>
+          <td>
+            <img src="images/disp128.png" align="middle" width="400px"/>
+            <figcaption>mesh coarseness = 128, displacement</figcaption>
+          </td>
+        </tr>
+      </table>
+    </div>
+</p>
+<p>Using a higher mesh coarseness changes the shading of displacement shader by a lot but doesn't change bump shading significantly.
+  This is because displacement shader involves actual geometry changes in vertices.
+</p>
+<p>
+<div align="middle">
+  <table style="width:100%">
+    <tr align="center">
+      <td>
+        <img src="images/5-m.png" align="middle" width="400px"/>
+      </td>
+      <td>
+        <img src="images/5m2.png" align="middle" width="400px"/>
+      </td>
+    </tr>
+  </table>
+</div>
+</p>
+</body>
+</html>
