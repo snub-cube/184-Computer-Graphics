@@ -1,0 +1,216 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<style>
+  body {
+    padding: 100px;
+    width: 1000px;
+    margin: auto;
+    text-align: left;
+    font-weight: 300;
+    font-family: 'Open Sans', sans-serif;
+    color: #121212;
+  }
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans Pro', sans-serif;
+  }
+</style>
+<title>CS 184 Rasterizer</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro" rel="stylesheet">
+</head>
+
+<body>
+
+<h1 align="middle">CS 184: Computer Graphics and Imaging, Spring 2018</h1>
+<h1 align="middle">Project 1: Rasterizer</h1>
+<h2 align="middle">Morgan Lyu, CS184</h2>
+
+<br><br>
+
+<div>
+
+<h2 align="middle">Overview</h2>
+<p>Give a high-level overview of what you implemented in this project. 
+  Think about what you've built as a whole. 
+  Share your thoughts on what interesting things you've learned from completing the project.</p>
+
+<p>In this project, I implemented different methods for sampling images. As a whole
+  the methods can strike a balance between speed, memory usage, and anti-aliasing power depending on different scenarios.
+</p>
+
+<h2 align="middle">Section I: Rasterization</h2>
+
+<h3 align="middle">Part 1: Rasterizing single-color triangles</h3>
+
+<p>To rasterize a triangle, I first created a box framing the triangle from the coordinates of its vertices.
+  Then, looping through every pixel within this box, I applied the line equation to determine if that pixel lies
+  within the 3 boundaries of the triangle. If the 3 line tests consistently yield results either greater or less than 0,
+  we consider that point to be inside the triangle. Then, if the pixel is within or on the triangle boundaries, 
+  its color is sampled and the corresponding pixel is filled.
+</p>
+
+<p>This algorithm is no worse than one that checks each sample
+   within the bounding box of the triangle because it does exactly that.</p>
+
+<img src="images/T1.png" align="middle" width="600px"/>
+
+
+<h3 align="middle">Part 2: Antialiasing triangles</h3>
+
+
+<p>My supersampling algorithm consist of the following functions: 1. rasterize-triangle, 2. fill_pixel, 3. set_sample_rate, 4. resolve_to_frame_buffer.</p>
+<p>My supersampling data structure consist of the following: sample_buffer which stores the color.</p>
+
+<p>To implement supersample, a feature is added to subdivide the sampling of each pixel into sqrt(sample_rate)
+  parts along height and width. These sample_rate number of subparts are iterated through within iterations
+  across pixels in the rasterize_triangle function. For fill_pixel, supersampling is implemented for a single pixel
+  as opposed to a range. These samples are stored in sample_buffer which is resized
+  to fit more samples depending on the sample rate. This is achieved by multiplying a rate variable to
+  the existing size in the set_sample_rate function. The average color of these samples per pixel are calculated 
+  in resolve_to_framebuffer function which are then displayed.
+</p>
+
+<p>Supersampling is useful because by sampling more than once per pixel and taking the average,
+  the display is not binary anymore. This reduces the effect of jaggies and helps with anti-aliasing because
+  it blurs the edges, hence making shapes seem more smooth and realistic.
+</p>
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/T2-1.png" align="middle" width="400px"/>
+        <figcaption align="middle">Sample rate = 1</figcaption>
+      </td>
+      <td>
+        <img src="images/T2-2.png" align="middle" width="400px"/>
+        <figcaption align="middle">Sample rate = 4</figcaption>
+      </td>
+      <td>
+        <img src="images/T2-3.png" align="middle" width="400px"/>
+        <figcaption align="middle">Sample rate = 16</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<h3 align="middle">Part 3: Transforms</h3>
+<p>My robot is doing ballet (the little swans).</p>
+
+<img src="images/T3.png" align="middle" width = "600px"/>
+
+<h2 align="middle">Section II: Sampling</h2>
+
+<h3 align="middle">Part 4: Barycentric coordinates</h3>
+
+<p>Barycentric coordinates is a coordinate system that can linearly interpolate across a triangle 
+  the values defined at the vertices. The following slide from lecture shows an example of how colors 
+  can be interpolated across a triangle using barycentric coordinates. Using the barycentric coordinate
+  equations, my implementation calculates the alpha, beta, gamma weights for each position within the triangle
+  and then calculates their color.
+</p>
+
+<img src="images/Bary.png" align="middle" width="600px"/>
+<img src="images/T4.png" align="middle" width = "600px"/>
+
+<h3 align="middle">Part 5: "Pixel sampling" for texture mapping</h3>
+
+<p>There are 2 types of pixel sampling in this project: 1. Nearest pixel sampling, 2. Bilinear sampling.
+Both of them sample colors from a different coordinate uv. The mapping between the coordinates is calculated
+using barycentric weights. </p>
+
+<p>Nearest sampling maps a given pixel to the uv coordinate and takes the color of the nearest point as its result.</p>
+<p>Bilinear sampling maps a given pixel point to the uv coordinate, establishes a grid of 4 nearest pixels
+  on it by rounding the point up and down in both x and y directions, and calculates a mixed color 
+  most close to what would be at the precise point. This is done by a series
+  of lerp functions. I interpolated between the two pairs of pixels in the horizontal direction at the point position, 
+  and then interpolate between their respective results in the vertical direction at the point. The resulting color
+  at the point is the displayed color.
+</p>
+
+<p></p>
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/T5-1.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest, sr = 1</figcaption>
+      </td>
+      <td>
+        <img src="images/T5-2.png" align="middle" width="400px"/>
+        <figcaption align="middle">Nearest, sr = 16</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/T5-3.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear, sr = 1</figcaption>
+      </td>
+      <td>
+        <img src="images/T5-4.png" align="middle" width="400px"/>
+        <figcaption align="middle">Bilinear, sr = 16</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<p>Using biliear sampling have better antialiasing effects than using nearest sampling, as seen in the smoother edges. 
+  The difference between the two methods become drastic when there exists a clear defined edge between colors, because
+  that is where jaggies typically occur. In these cases, bilinear smoothes the edges out more evenly because its calculation
+  takes into account a larger range of pixels (4 instead of 1).
+</p>
+
+<h3 align="middle">Part 6: "Level sampling" with mipmaps for texture mapping</h3>
+Explain level sampling in your own words and describe how you implemented it for texture mapping.
+
+
+Describe the tradeoffs between speed, memory usage, 
+and antialiasing power between the three various techniques.
+
+<p>Level sampling chooses a downsampled texture from a mipmaps pyramid of decreasing sizes. 
+  To find the mipmap level D, formulas from lecture are used.</p>
+
+  <img src="images/L.png" align="middle" width="600px"/>
+
+
+<p>Mipmaps takes up more memory usage for the image pyramid although it renders fast and has good anti-aliasing power.
+  Supersampling and bilinear sampling also have good anti-aliasing power due to their averaging and interpolating nature respectively.
+  However, between the two, biliear sampling is the faster one.
+</p>
+
+
+<div align="middle">
+  <table style="width=100%">
+    <tr>
+      <td>
+        <img src="images/T6-1.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_ZERO, P_NEAREST</figcaption>
+      </td>
+      <td>
+        <img src="images/T6-2.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_ZERO, P_LINEAR</figcaption>
+      </td>
+    </tr>
+    <br>
+    <tr>
+      <td>
+        <img src="images/T6-3.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_NEAREST, P_NEAREST</figcaption>
+      </td>
+      <td>
+        <img src="images/T6-4.png" align="middle" width="400px"/>
+        <figcaption align="middle">L_NEAREST, P_LINEAR</figcaption>
+      </td>
+    </tr>
+  </table>
+</div>
+
+<h2 align="middle">Section III: Art Competition</h2>
+<p>If you are not participating in the optional art competition, don't worry about this section!</p>
+
+<h3 align="middle">Part 7: Draw something interesting!</h3>
+
+</body>
+</html>
